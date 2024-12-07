@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "declaration": true,
+    "jsx": "react-jsx",
+    "outDir": "dist",
+    "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    // Best practices
+    "skipLibCheck": true,
+    "noFallthroughCasesInSwitch": true,
+  },
+  "include": ["src/**/*"]
+}
