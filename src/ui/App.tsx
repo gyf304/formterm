@@ -66,9 +66,6 @@ export function App() {
 						});
 					}, 100);
 					break;
-				case "cancel":
-					const { id } = req.params as RPCCancelRequest;
-
 				default:
 					console.log("Unknown method", req.method);
 			}

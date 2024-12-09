@@ -55,9 +55,9 @@ export const BaseFormQuestion: React.FC<BaseFormQuestionProps> = (p) => {
 			}
 			{
 				p.config.description === undefined ? undefined :
-				<ReactMarkdown>
-					{p.config.description}
-				</ReactMarkdown>
+				typeof p.config.description === "string" ? p.config.description :
+				p.config.description.mimeType === "text/markdown" ? <ReactMarkdown>{p.config.description.content}</ReactMarkdown> :
+				undefined
 			}
 			{p.children}
 		</>

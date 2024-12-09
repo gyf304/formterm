@@ -1,5 +1,5 @@
 import * as zod from "zod";
-import { AnswerType, Asker, CheckboxesQuestionConfig, DropdownQuestionConfig, GroupQuestionConfig, InfoQuestionConfig, OmitType, PasswordQuestionConfig, Question, QuestionConfig, QuestionContext, RadioQuestionConfig, TextQuestionConfig } from "./base";
+import { AnswerType, Asker, Question, QuestionConfig, QuestionContext } from "./base.js";
 
 export interface RPCAskRequest<C extends QuestionConfig = QuestionConfig> {
 	method: "ask";

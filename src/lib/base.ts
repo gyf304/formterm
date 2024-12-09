@@ -1,7 +1,12 @@
+export type StringOrRichContent = string | {
+	mimeType: "text/markdown";
+	content: string;
+};
+
 export interface BaseQuestionConfig {
 	type: string;
 	title: string;
-	description?: string;
+	description?: StringOrRichContent;
 }
 
 export interface TextQuestionConfig extends BaseQuestionConfig {
@@ -169,13 +174,13 @@ export abstract class Asker {
 export interface FormInfo {
 	id: string;
 	name?: string;
-	description?: string;
+	description?: StringOrRichContent;
 }
 
-export class Form {
+export class Form implements FormInfo {
 	readonly id: string;
 	readonly name?: string;
-	readonly description?: string;
+	readonly description: FormInfo["description"];
 	constructor(
 		info: FormInfo,
 		public readonly run: (asker: Asker) => Promise<void>,

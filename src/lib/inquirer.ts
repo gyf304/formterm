@@ -1,9 +1,27 @@
 import * as p from "@inquirer/prompts";
 import * as z from "zod";
+import chalk from "chalk";
+
 import { Marked } from "marked";
 import { markedTerminal } from "marked-terminal";
 
-import { AnswerType, Asker, CheckboxesQuestionConfig, DateQuestionConfig, DropdownQuestionConfig, GroupQuestionConfig, InfoQuestionConfig, OmitType, PasswordQuestionConfig, Question, QuestionConfig, QuestionContext, RadioQuestionConfig, TextQuestionConfig, TimeQuestionConfig } from "./base";
+import {
+	AnswerType,
+	Asker,
+	CheckboxesQuestionConfig,
+	DateQuestionConfig,
+	DropdownQuestionConfig,
+	GroupQuestionConfig,
+	InfoQuestionConfig,
+	OmitType,
+	PasswordQuestionConfig,
+	Question,
+	QuestionConfig,
+	QuestionContext,
+	RadioQuestionConfig,
+	TextQuestionConfig,
+	TimeQuestionConfig,
+} from "./base.js";
 
 const marked = new Marked(markedTerminal() as any);
 
@@ -17,13 +35,17 @@ abstract class InquirerQuestion<A extends InquirerAsker, C extends QuestionConfi
 		return this.abortController.signal;
 	}
 
-	protected async showInfo() {
-		if (!this.asker.config.showDescription) {
+	protected async showInfo(force?: boolean) {
+		if (!this.asker.config.showDescription && !force) {
 			return;
 		}
-		console.log(marked.parse("# " + this.config.title).toString().trim());
+		console.log(chalk.bold(this.config.title));
 		if (this.config.description) {
-			console.log(marked.parse(this.config.description).toString().trim());
+			if (typeof this.config.description === "string") {
+				console.log(this.config.description);
+			} else if (this.config.description.mimeType === "text/markdown") {
+				console.log(marked.parse(this.config.description.content).toString().trim());
+			}
 		}
 	}
 }
@@ -72,7 +94,7 @@ class InquirerTimeQuestion<A extends InquirerAsker> extends InquirerQuestion<A, 
 
 class InquirerInfoQuestion<A extends InquirerAsker> extends InquirerQuestion<A, InfoQuestionConfig> {
 	async run() {
-		await this.showInfo();
+		await this.showInfo(true);
 	}
 }
 

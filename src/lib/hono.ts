@@ -1,20 +1,13 @@
-import * as zod from "zod";
-
+import * as path from "node:path";
 import { Context, Env, Hono, MiddlewareHandler } from "hono";
 
-import { RPC, RPCAsker, RPCRequest, RPCResponse } from "./rpc.js";
+import { RPC, RPCAsker, RPCRequest } from "./rpc.js";
 import { JSONRPCRequest, jsonRPCResponseSchema, Resolver } from "./ws.js";
 import { Form, FormInfo } from "./base.js";
 import { UpgradeWebSocket, WSContext } from "hono/ws";
-import { getCookie, setCookie } from "hono/cookie";
 import { ServeStaticOptions } from "hono/serve-static";
-import { CookieOptions } from "hono/utils/cookie.js";
 
 type ServeStatic = (options: ServeStaticOptions<Env>) => MiddlewareHandler;
-
-interface Config {
-	staticRoot: string;
-}
 
 class HonoWebSocketRPC implements RPC {
 	private readonly resolvers = new Map<string, Resolver<any>>();
@@ -72,28 +65,20 @@ export class HonoAsker extends RPCAsker {
 		super(rpc);
 		this.rpc = rpc;
 	}
-
-	async fetch(url: string) {
-		return this.rpc.call({
-			method: "fetch",
-			url,
-		});
-	}
-
-	async redirect(url: string) {
-		return this.rpc.call({
-			method: "redirect",
-			url,
-		});
-	}
 }
 
-function dir(path: string) {
+function dir(path: string, level = 1) {
 	path = path.replace(/file:\/\//, "");
 	path = path.replace(/\/$/, "");
-	const pathParts = path.split("/");
-	pathParts.pop();
+	let pathParts = path.split("/");
+	pathParts = pathParts.slice(0, pathParts.length - level);
 	return pathParts.join("/");
+}
+
+export interface HonoConfig {
+	staticRoot?: string;
+	defaultForm?: string;
+	prefix?: string;
 }
 
 export function hono(
@@ -102,35 +87,66 @@ export function hono(
 	serveStatic: ServeStatic,
 	forms: {
 		get: (key: string) => Form | undefined,
-		keys?: () => Iterable<string>,
 	},
-	config: Config = {
-		staticRoot: dir(import.meta.url.toString()) + "/../../dist/ui"
-	},
+	config?: HonoConfig,
 ) {
+	let staticRoot = config?.staticRoot ?? dir(import.meta.url.toString(), 3) + "/dist/ui/";
+	staticRoot = path.relative(process.cwd(), staticRoot);
+	let prefix = config?.prefix ?? "";
+	if (prefix !== "") {
+		prefix = prefix.replace(/^\/+/, "").replace(/\/+$/, "");
+		prefix = "/" + prefix;
+	}
+
 	const serveIndex = serveStatic({
-		root: config.staticRoot,
+		root: staticRoot,
 		rewriteRequestPath: () => "/index.html",
 	});
 
-	app.get("/static/*", serveStatic({
-		root: config.staticRoot,
-		rewriteRequestPath: (path) => path.replace(/^\/static\//, "/"),
-	}));
-
-	app.get("/forms", async (c) => {
-		return c.json(Array.from(forms.keys?.() ?? []));
+	const serveAssets = serveStatic({
+		root: staticRoot,
+		rewriteRequestPath: (path) => "/" + path.split("/").pop(),
 	});
 
-	app.get("/forms/:form", async (c, next) => {
-		const form = forms.get(c.req.param("form"));
+	if (config?.defaultForm !== undefined) {
+		if (prefix !== "") {
+			app.get(prefix, async (c) => {
+				const form = forms.get(config.defaultForm!);
+				if (!form) {
+					return c.notFound();
+				}
+				return c.redirect(encodeURIComponent(config.defaultForm!) + "/");
+			});
+		}
+		app.get(`${prefix}/`, async (c) => {
+			const form = forms.get(config.defaultForm!);
+			if (!form) {
+				return c.notFound();
+			}
+			return c.redirect(encodeURIComponent(config.defaultForm!) + "/");
+		});
+	}
+
+	app.get(`${prefix}/:form`, async (c) => {
+		const formName = decodeURIComponent(c.req.param("form")!);
+		const form = forms.get(formName);
+		if (!form) {
+			return c.notFound();
+		}
+		const url = new URL(c.req.url);
+		return c.redirect(url.pathname + "/");
+	});
+
+	app.get(`${prefix}/:form/`, async (c, next) => {
+		const formName = decodeURIComponent(c.req.param("form")!);
+		const form = forms.get(formName);
 		if (!form) {
 			return c.notFound();
 		}
 		return await serveIndex(c, next);
 	});
 
-	app.get("/forms/:form/info.json", async (c, next) => {
+	app.get(`${prefix}/:form/info.json`, async (c, next) => {
 		const form = forms.get(c.req.param("form"));
 		if (!form) {
 			return c.notFound();
@@ -142,7 +158,7 @@ export function hono(
 		} satisfies FormInfo);
 	});
 
-	app.get("/forms/:form/ws", upgradeWebSocket(async (c) => {
+	app.get(`${prefix}/:form/ws`, upgradeWebSocket(async (c) => {
 		let rpc: HonoWebSocketRPC | undefined;
 		return {
 			onOpen: (evt, ws) => {
@@ -183,4 +199,6 @@ export function hono(
 			},
 		};
 	}));
+
+	app.get(`${prefix}/:form/:filename`, serveAssets);
 }
