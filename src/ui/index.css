@@ -1,0 +1,13 @@
+html,body,#root {
+	width: 100%;
+	margin: 0;
+	padding: 0;
+	min-height: 100%;
+}
+
+/* dark mode */
+@media (prefers-color-scheme: dark) {
+	html {
+		background-color: #1e1e1e;
+	}
+}

@@ -5,6 +5,8 @@
     "dev": "bun run --hot src/index.ts"
   },
   "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "@hono/node-ws": "^1.0.4",
     "@inquirer/prompts": "^7.1.0",
     "hono": "^4.6.12",
     "marked": "^15.0.3",
@@ -15,11 +17,14 @@
     "@emotion/react": "^11.13.5",
     "@emotion/styled": "^11.13.5",
     "@mui/material": "^6.1.10",
+    "@mui/x-date-pickers": "^7.23.1",
     "@types/bun": "latest",
     "@types/react": "^19.0.1",
     "@types/react-dom": "^19.0.1",
+    "dayjs": "^1.11.13",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-markdown": "^9.0.1",
     "typescript": "^5.7.2"
   }
 }

@@ -1,6 +1,7 @@
-interface BaseQuestionConfig {
+export interface BaseQuestionConfig {
 	type: string;
 	title: string;
+	description?: string;
 }
 
 export interface TextQuestionConfig extends BaseQuestionConfig {
@@ -30,14 +31,17 @@ export interface DropdownQuestionConfig<O extends Record<string, string> = Recor
 	choices: O;
 }
 
-export interface MarkdownQuestionConfig extends BaseQuestionConfig {
-	type: "markdown";
-	markdown: string;
+export interface DateQuestionConfig extends BaseQuestionConfig {
+	type: "date";
+}
+
+export interface TimeQuestionConfig extends BaseQuestionConfig {
+	type: "time";
 }
 
 export interface GroupQuestionConfig extends BaseQuestionConfig {
 	type: "group";
-	questions: Record<string, Question<any, any, any>>;
+	questions: Record<string, QuestionConfig>;
 }
 
 export type QuestionConfig =
@@ -47,7 +51,8 @@ export type QuestionConfig =
 	CheckboxesQuestionConfig |
 	RadioQuestionConfig |
 	DropdownQuestionConfig |
-	MarkdownQuestionConfig |
+	DateQuestionConfig |
+	TimeQuestionConfig |
 	GroupQuestionConfig |
 	never;
 
@@ -58,7 +63,8 @@ export type AnswerType<C extends QuestionConfig> =
 	C extends { type: "checkboxes" } ? string[] :
 	C extends { type: "radio" } ? string :
 	C extends { type: "dropdown" } ? string :
-	C extends { type: "markdown" } ? void :
+	C extends { type: "date" } ? string :
+	C extends { type: "time" } ? string :
 	C extends { type: "group" } ? Record<string, unknown> :
 	never;
 
@@ -82,8 +88,6 @@ export abstract class Question<A extends Asker, const C extends QuestionConfig, 
 	) {}
 
 	protected abstract run(): Promise<O>;
-
-	abstract remove(): Promise<void>;
 
 	get promise(): Promise<O> {
 		if (this._promise === undefined) {
@@ -112,29 +116,72 @@ export abstract class Question<A extends Asker, const C extends QuestionConfig, 
 	}
 
 	toJSON(): QuestionConfig {
-		if (this.config.type === "group") {
-			return {
-				type: "group",
-				title: this.config.title,
-				questions: Object.fromEntries(
-					Object.entries(this.config.questions)
-						.map(([key, question]) => [key, question.toJSON()] as const),
-				) as any,
-			}
-		}
 		return this.config;
 	}
 }
 
-export interface Asker {
-	info(config: OmitType<InfoQuestionConfig>, context?: QuestionContext): Question<this, InfoQuestionConfig, void>;
-	markdown(config: OmitType<MarkdownQuestionConfig>, context?: QuestionContext): Question<this, MarkdownQuestionConfig, void>;
+export abstract class Asker {
+	ask<C extends QuestionConfig>(config: C, context?: QuestionContext): Question<this, C, AnswerType<C>> {
+		throw new Error("Not implemented");
+	}
 
-	text(config: OmitType<TextQuestionConfig>, context?: QuestionContext): Question<this, { type: "text"; title: string }, string>;
-	password(config: OmitType<PasswordQuestionConfig>, context?: QuestionContext): Question<this, { type: "password"; title: string }, string>;
-	checkboxes<O extends Record<string, string>>(config: OmitType<CheckboxesQuestionConfig<O>>, context?: QuestionContext): Question<this, { type: "checkboxes"; title: string; choices: O }, keyof O extends string ? (keyof O)[] : never>;
-	radio<O extends Record<string, string>>(config: OmitType<RadioQuestionConfig<O>>, context?: QuestionContext): Question<this, { type: "radio"; title: string; choices: O }, keyof O extends string ? keyof O : never>;
-	dropdown<O extends Record<string, string>>(config: OmitType<DropdownQuestionConfig<O>>, context?: QuestionContext): Question<this, { type: "dropdown"; title: string; choices: O }, keyof O extends string ? keyof O : never>;
+	info(config: OmitType<InfoQuestionConfig>, context?: QuestionContext): Question<this, InfoQuestionConfig, void> {
+		return this.ask({ type: "info", ...config }, context);
+	}
 
-	group<Q extends Record<string, Question<any, any, any>>>(config: OmitType<GroupQuestionConfig>, context?: QuestionContext): Question<this, { type: "group"; title: string; questions: Q }, Record<string, AnswerType<Q[keyof Q]["config"]>>>;
+	text(config: OmitType<TextQuestionConfig>, context?: QuestionContext): Question<this, { type: "text"; title: string }, string> {
+		return this.ask({ type: "text", ...config }, context);
+	}
+	password(config: OmitType<PasswordQuestionConfig>, context?: QuestionContext): Question<this, { type: "password"; title: string }, string> {
+		return this.ask({ type: "password", ...config }, context);
+	}
+	checkboxes<O extends Record<string, string>>(config: OmitType<CheckboxesQuestionConfig<O>>, context?: QuestionContext): Question<this, { type: "checkboxes"; title: string; choices: O }, keyof O extends string ? (keyof O)[] : never> {
+		return this.ask({ type: "checkboxes", ...config }, context) as any;
+	}
+	radio<O extends Record<string, string>>(config: OmitType<RadioQuestionConfig<O>>, context?: QuestionContext): Question<this, { type: "radio"; title: string; choices: O }, keyof O extends string ? keyof O : never> {
+		return this.ask({ type: "radio", ...config }, context) as any;
+	}
+	dropdown<O extends Record<string, string>>(config: OmitType<DropdownQuestionConfig<O>>, context?: QuestionContext): Question<this, { type: "dropdown"; title: string; choices: O }, keyof O extends string ? keyof O : never> {
+		return this.ask({ type: "dropdown", ...config }, context) as any;
+	}
+	date(config: OmitType<DateQuestionConfig>, context?: QuestionContext): Question<this, { type: "date"; title: string }, string> {
+		return this.ask({ type: "date", ...config }, context);
+	}
+	time(config: OmitType<TimeQuestionConfig>, context?: QuestionContext): Question<this, { type: "time"; title: string }, string> {
+		return this.ask({ type: "time", ...config }, context);
+	}
+
+	group<Q extends Record<string, Question<any, any, any>>>(
+		config: { title: string; questions: Q },
+		context?: QuestionContext,
+	): Question<this, GroupQuestionConfig, Record<string, AnswerType<Q[keyof Q]["config"]>>> {
+		return this.ask({
+			type: "group",
+			...config,
+			questions: Object.fromEntries(
+				Object.entries(config.questions)
+					.map(([key, question]) => [key, question.toJSON()] as const),
+			) as any,
+		}, context) as any;
+	}
+}
+
+export interface FormInfo {
+	id: string;
+	name?: string;
+	description?: string;
+}
+
+export class Form {
+	readonly id: string;
+	readonly name?: string;
+	readonly description?: string;
+	constructor(
+		info: FormInfo,
+		public readonly run: (asker: Asker) => Promise<void>,
+	) {
+		this.id = info.id;
+		this.name = info.name;
+		this.description = info.description;
+	}
 }

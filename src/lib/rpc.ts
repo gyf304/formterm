@@ -1,28 +1,80 @@
 import * as zod from "zod";
-import { AnswerType, Asker, CheckboxesQuestionConfig, DropdownQuestionConfig, GroupQuestionConfig, InfoQuestionConfig, MarkdownQuestionConfig, OmitType, PasswordQuestionConfig, Question, QuestionConfig, QuestionContext, RadioQuestionConfig, TextQuestionConfig } from "./base";
+import { AnswerType, Asker, CheckboxesQuestionConfig, DropdownQuestionConfig, GroupQuestionConfig, InfoQuestionConfig, OmitType, PasswordQuestionConfig, Question, QuestionConfig, QuestionContext, RadioQuestionConfig, TextQuestionConfig } from "./base";
 
-export interface RPC {
-	call(method: string, params: unknown): Promise<unknown>;
+export interface RPCAskRequest<C extends QuestionConfig = QuestionConfig> {
+	method: "ask";
+	id: string;
+	config: C;
 }
 
+export type RPCAskResponse<C extends QuestionConfig = QuestionConfig> = AnswerType<C>;
+export interface RPCCancelRequest {
+	method: "cancel";
+	id: string;
+}
+
+export interface RPCRemoveRequest {
+	method: "remove";
+	id: string;
+}
+
+export interface RPCFetchRequest {
+	method: "fetch";
+	url: string;
+}
+
+export interface RPCRedirectRequest {
+	method: "redirect";
+	url: string;
+}
+
+export type RPCRequest = RPCAskRequest | RPCCancelRequest | RPCRemoveRequest | RPCFetchRequest | RPCRedirectRequest;
+export type RPCResponse<I extends RPCRequest> =
+	I extends RPCAskRequest<infer C> ? RPCAskResponse<C> :
+	I extends RPCCancelRequest ? void :
+	I extends RPCRemoveRequest ? void :
+	I extends RPCFetchRequest ? void :
+	I extends RPCRedirectRequest ? void :
+	never;
+
+export interface RPC {
+	call(request: RPCRequest): Promise<unknown>;
+}
 export class FakeRPC implements RPC {
-	async call(method: string, params: unknown): Promise<unknown> {
-		console.log(method, params);
+	async call(request: RPCRequest): Promise<unknown> {
+		console.log(request);
 		throw new Error("Not implemented");
 	}
 }
 
-const schemas = {
-	text: zod.string(),
-	password: zod.string(),
-	info: zod.void(),
-	checkboxes: zod.array(zod.string()),
-	radio: zod.string(),
-	dropdown: zod.string(),
-	markdown: zod.void(),
-	group: zod.record(zod.unknown()),
-} satisfies {
-	[K in QuestionConfig["type"]]: zod.ZodType<AnswerType<Extract<QuestionConfig, { type: K }>>>;
+function getSchema(config: QuestionConfig): zod.ZodType<AnswerType<QuestionConfig>> {
+	switch (config.type) {
+		case "info":
+			return zod.void();
+		case "text":
+			return zod.string();
+		case "password":
+			return zod.string();
+		case "checkboxes":
+			return zod.array(zod.string())
+				.refine((values) => values.every((value) => Object.keys(config.choices).includes(value)))
+				.transform((values) => Array.from(new Set(values)));
+		case "radio":
+			return zod.string().refine((value) => Object.keys(config.choices).includes(value));
+		case "dropdown":
+			return zod.string().refine((value) => Object.keys(config.choices).includes(value));
+		case "date":
+			return zod.string().date();
+		case "time":
+			return zod.string().time();
+		case "group":
+			return zod.object(Object.fromEntries(
+				Object.entries(config.questions)
+					.map(([key, question]) => [key, getSchema(question)] as const),
+			));
+		default:
+			throw new Error(`Unknown question type: ${(config as any).type}`);
+	}
 }
 
 function signalPromise(signal: AbortSignal): Promise<Event> {
@@ -36,8 +88,13 @@ export class RPCQuestion<A extends RPCAsker> extends Question<A, QuestionConfig,
 	protected abortController: AbortController = new AbortController();
 
 	private async call() {
-		const result = await this.asker.rpc.call("ask", { id: this.id, config: this.config });
-		return schemas[this.config.type].parse(result);
+		const result = await this.asker.rpc.call({
+			method: "ask",
+			id: this.id,
+			config: this.config,
+		});
+		const parsed = getSchema(this.config).parse(result);
+		return parsed;
 	}
 
 	protected async run(): Promise<any> {
@@ -45,9 +102,12 @@ export class RPCQuestion<A extends RPCAsker> extends Question<A, QuestionConfig,
 			throw new Error("Question aborted");
 		}
 		signalPromise(this.signal).catch(() => {
-			this.asker.rpc.call("cancel", { id: this.id });
+			this.asker.rpc.call({
+				method: "cancel",
+				id: this.id,
+			});
 		});
-		await Promise.race([signalPromise(this.signal), this.call()]);
+		return await Promise.race([signalPromise(this.signal), this.call()]);
 	}
 
 	get signal() {
@@ -56,48 +116,14 @@ export class RPCQuestion<A extends RPCAsker> extends Question<A, QuestionConfig,
 		}
 		return this.abortController.signal;
 	}
-
-	async remove() {
-		if (this.signal.aborted) {
-			return;
-		}
-		this.abortController?.abort();
-		this.asker.rpc.call("remove", { id: this.id }); // don't await
-	}
 }
 
-export class RPCAsker implements Asker {
-	constructor(public readonly rpc: RPC) {}
-
-	info(config: OmitType<InfoQuestionConfig>, context?: QuestionContext) {
-		return new RPCQuestion(this, { type: "info", ...config }, context) as any;
+export class RPCAsker extends Asker {
+	constructor(public readonly rpc: RPC) {
+		super();
 	}
 
-	markdown(config: OmitType<MarkdownQuestionConfig>, context?: QuestionContext) {
-		return new RPCQuestion(this, { type: "markdown", ...config }, context) as any;
-	}
-
-	text(config: OmitType<TextQuestionConfig>, context?: QuestionContext) {
-		return new RPCQuestion(this, { type: "text", ...config }, context) as any;
-	}
-
-	password(config: OmitType<PasswordQuestionConfig>, context?: QuestionContext) {
-		return new RPCQuestion(this, { type: "password", ...config }, context) as any;
-	}
-
-	checkboxes(config: OmitType<CheckboxesQuestionConfig>, context?: QuestionContext) {
-		return new RPCQuestion(this, { type: "checkboxes", ...config }, context) as any;
-	}
-
-	radio(config: OmitType<RadioQuestionConfig>, context?: QuestionContext) {
-		return new RPCQuestion(this, { type: "radio", ...config }, context) as any;
-	}
-
-	dropdown(config: OmitType<DropdownQuestionConfig>, context?: QuestionContext) {
-		return new RPCQuestion(this, { type: "dropdown", ...config }, context) as any;
-	}
-
-	group(config: OmitType<GroupQuestionConfig>, context?: QuestionContext) {
-		return new RPCQuestion(this, { type: "group", ...config }, context) as any;
+	ask<C extends QuestionConfig>(config: C, context?: QuestionContext): Question<this, C, AnswerType<C>> {
+		return new RPCQuestion(this, config, context) as any;
 	}
 }

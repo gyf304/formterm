@@ -1,8 +1,12 @@
-import type { Asker } from "../lib";
+import { type Asker, Form } from "../lib";
 
 // A form is a function that takes an asker as an argument
-export default async function (asker: Asker) {
-	await asker.markdown({ title: "Welcome", markdown: `# Hello, world!` });
+export default new Form({
+	id: "hello-world",
+	name: "Hello, world!",
+	description: `# Hello, world!`,
+}, async function (asker: Asker) {
+	console.log(await asker.date({ title: "What's your birthday?" }));
 
 	const name = await asker.text({ title: "What's your name?" });
 	await asker.info({ title: `Hello, ${name}!` });
@@ -41,4 +45,4 @@ export default async function (asker: Asker) {
 		}
 	});
 	console.log(group);
-}
+});

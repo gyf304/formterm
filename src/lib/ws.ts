@@ -1,14 +1,15 @@
 import * as zod from "zod"
-import { RPC } from "./rpc.js";
+import { RPC, RPCRequest } from "./rpc.js";
 
-const requestSchema = zod.object({
+export const jsonRPCRequestSchema = zod.object({
 	jsonrpc: zod.literal("2.0"),
 	id: zod.string(),
 	method: zod.string(),
 	params: zod.unknown(),
 });
+export type JSONRPCRequest = zod.infer<typeof jsonRPCRequestSchema>;
 
-const responseSchema = zod.object({
+export const jsonRPCResponseSchema = zod.object({
 	jsonrpc: zod.literal("2.0"),
 	id: zod.string(),
 	result: zod.any(),
@@ -18,8 +19,9 @@ const responseSchema = zod.object({
 		data: zod.any(),
 	}).optional(),
 });
+export type JSONRPCResponse = zod.infer<typeof jsonRPCResponseSchema>;
 
-interface Resolver<T> {
+export interface Resolver<T> {
 	resolve: (value: T) => void;
 	reject: (reason: any) => void;
 }
@@ -29,7 +31,7 @@ export class WebSocketRPC implements RPC {
 
 	constructor(private readonly ws: WebSocket) {
 		ws.onmessage = (event) => {
-			const response = responseSchema.parse(JSON.parse(event.data));
+			const response = jsonRPCResponseSchema.parse(JSON.parse(event.data));
 			const resolver = this.resolvers.get(response.id);
 			if (!resolver) {
 				return;
@@ -47,18 +49,18 @@ export class WebSocketRPC implements RPC {
 		};
 	}
 
-	async call(method: string, params: unknown): Promise<unknown> {
-		const id = Math.random().toString(36).slice(2);
-		const request = {
+	async call(request: RPCRequest): Promise<unknown> {
+		const rpcId = Math.random().toString(36).slice(2);
+		const rpcRequest = {
 			jsonrpc: "2.0",
-			id,
-			method,
-			params,
-		} satisfies zod.infer<typeof requestSchema>;
+			id: rpcId,
+			method: request.method,
+			params: request,
+		} satisfies JSONRPCRequest;
 
-		this.ws.send(JSON.stringify(request));
+		this.ws.send(JSON.stringify(rpcRequest));
 		return new Promise((resolve, reject) => {
-			this.resolvers.set(id, { resolve, reject });
+			this.resolvers.set(rpcId, { resolve, reject });
 		});
 	}
 }
