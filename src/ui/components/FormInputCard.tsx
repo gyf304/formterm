@@ -19,6 +19,7 @@ import { Box, Checkbox, FormControlLabel, MenuItem, Radio, RadioGroup, Select, T
 
 export interface FormQuestionCardProps<C extends QuestionConfig> {
 	config: C;
+	disabled?: boolean;
 	autoFocus?: boolean;
 	submit?: (answer: AnswerType<C>) => void;
 }
@@ -312,6 +313,7 @@ export const FormQuestion: React.FC<FormQuestionProps<QuestionConfig>> = (p) => 
 	}
 
 	return <Element
+		disabled={p.disabled}
 		config={p.config}
 		value={p.value as any}
 		onChange={p.onChange}
@@ -331,13 +333,15 @@ export const FormQuestionCard: React.FC<FormQuestionCardProps<QuestionConfig>> =
 		}
 	}, []);
 
+	const disabled = p.disabled || submitted;
+
 	return (
 		<FormCard
 			onSubmit={p.config.type === "info" ? undefined : () => {
 				setSubmitted(true);
 				p.submit?.(value);
 			}}
-			disabled={submitted || hasError}
+			disabled={disabled || hasError}
 		>
 			<FormQuestion
 				config={p.config}
@@ -353,6 +357,7 @@ export const FormQuestionCard: React.FC<FormQuestionCardProps<QuestionConfig>> =
 					}
 				}}
 				autoFocus={p.autoFocus}
+				disabled={disabled}
 			/>
 		</FormCard>
 	);

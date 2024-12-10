@@ -1,69 +1,140 @@
+import * as zod from "zod";
 import * as path from "node:path";
 import { Context, Env, Hono, MiddlewareHandler } from "hono";
 
-import { RPC, RPCAsker, RPCRequest } from "./rpc.js";
-import { JSONRPCRequest, jsonRPCResponseSchema, Resolver } from "./ws.js";
-import { Form, FormInfo } from "./base.js";
+import { AnswerType, Asker, Form, FormInfo, Question, QuestionConfig, QuestionContext } from "./base.js";
 import { UpgradeWebSocket, WSContext } from "hono/ws";
 import { ServeStaticOptions } from "hono/serve-static";
 
 type ServeStatic = (options: ServeStaticOptions<Env>) => MiddlewareHandler;
 
-class HonoWebSocketRPC implements RPC {
-	private readonly resolvers = new Map<string, Resolver<any>>();
-	constructor(private readonly ws: WSContext) {}
+interface ResolveRejecter<T> {
+	resolve: (value: T) => void;
+	reject: (reason: any) => void;
+}
 
-	async call(request: RPCRequest): Promise<unknown> {
-		if (this.ws === undefined) {
-			throw new Error("WebSocket not connected");
+interface HonoQuestionMessage {
+	type: "question";
+	id: string;
+	config: QuestionConfig;
+}
+
+interface HonoCancelMessage {
+	type: "cancel";
+	id: string;
+}
+
+export type HonoServerMessage = HonoQuestionMessage | HonoCancelMessage;
+
+const honoAnswerMessageSchema = zod.object({
+	type: zod.literal("answer"),
+	id: zod.string(),
+	answer: zod.unknown(),
+});
+
+export type HonoAnswerMessage = zod.infer<typeof honoAnswerMessageSchema>;
+
+const honoClientMessageSchema = honoAnswerMessageSchema;
+export type HonoClientMessage = zod.infer<typeof honoClientMessageSchema>;
+
+interface PendingQuestion {
+	question: Question<any, QuestionConfig, any>;
+	resolve: (value: unknown) => void;
+	reject: (reason: any) => void;
+}
+
+
+function signalPromise(signal: AbortSignal): Promise<Event> {
+	return new Promise((_resolve, reject) => {
+		signal.addEventListener("abort", reject, { once: true });
+	});
+}
+
+export class HonoQuestion<A extends HonoAsker> extends Question<A, QuestionConfig, any> {
+	public readonly id = Math.random().toString(36).slice(2);
+	protected abortController: AbortController = new AbortController();
+
+	protected async run(): Promise<any> {
+		if (this.signal.aborted) {
+			throw new Error("Question aborted");
 		}
-
-		const rpcId = Math.random().toString(36).slice(2);
-		const rpcRequest = {
-			jsonrpc: "2.0",
-			id: rpcId,
-			method: request.method,
-			params: request,
-		} satisfies JSONRPCRequest;
-
-		this.ws.send(JSON.stringify(rpcRequest));
-		return new Promise((resolve, reject) => {
-			this.resolvers.set(rpcId, { resolve, reject });
+		signalPromise(this.signal).catch(() => {
+			this.asker.ws?.send(JSON.stringify({
+				type: "cancel",
+				id: this.id,
+			} satisfies HonoCancelMessage));
 		});
+		const promise = new Promise((resolve, reject) => {
+			this.asker.pendingQuestions.set(this.id, {
+				question: this,
+				resolve,
+				reject,
+			});
+			this.asker.ws?.send(JSON.stringify({
+				type: "question",
+				id: this.id,
+				config: this.config,
+			} satisfies HonoQuestionMessage));
+		});
+		return await Promise.race([signalPromise(this.signal), promise]);
 	}
 
-	public onMessage(message: string) {
-		const response = jsonRPCResponseSchema.parse(JSON.parse(message));
-		const resolver = this.resolvers.get(response.id);
-		if (!resolver) {
-			return;
+	get signal() {
+		if (this.context?.signal) {
+			return AbortSignal.any([this.context.signal, this.abortController.signal]);
 		}
-		if (response.error) {
-			resolver.reject(response.error);
-		} else {
-			resolver.resolve(response.result);
-		}
-		this.resolvers.delete(response.id);
-	}
-
-	public onClose() {
-		this.resolvers.forEach(({ reject }) => reject(new Error("WebSocket closed")));
-	}
-
-	public onError(err: any) {
-		this.resolvers.forEach(({ reject }) => reject(err));
+		return this.abortController.signal;
 	}
 }
 
-export class HonoAsker extends RPCAsker {
-	readonly rpc: HonoWebSocketRPC;
+export class HonoAsker extends Asker {
+	ws?: WSContext;
+	pendingQuestions = new Map<string, PendingQuestion>();
 
 	constructor(
-		rpc: HonoWebSocketRPC,
 		public readonly context: Context,
+		private readonly form: Form,
+		private errorHandler: (err: any) => void = () => {},
 	) {
-		super(rpc);
-		this.rpc = rpc;
+		super();
+	}
+
+	ask<C extends QuestionConfig>(config: C, context?: QuestionContext): Question<this, C, AnswerType<C>> {
+		return new HonoQuestion(this, config, context) as any;
+	}
+
+	onOpen(_evt: unknown, ws: WSContext) {
+		this.ws = ws;
+		this.form.run(this).catch((err) => {
+			this.errorHandler(err);
+			ws.close(1008, err instanceof Error ? err.message : "Unnknown Error");
+		}).then(() => {
+			ws.close(1000, "OK");
+		});
+	}
+
+	onMessage(evt: MessageEvent) {
+		const rawMessage = evt.data;
+		if (typeof rawMessage !== "string") {
+			return;
+		}
+		const message = honoClientMessageSchema.parse(JSON.parse(rawMessage));
+		if (message.type === "answer") {
+			const pendingQuestion = this.pendingQuestions.get(message.id);
+			if (pendingQuestion === undefined) {
+				return;
+			}
+			this.pendingQuestions.delete(message.id);
+			pendingQuestion.resolve(pendingQuestion.question.answerSchema.parse(message.answer));
+		}
+	}
+
+	onClose() {
+		this.pendingQuestions.forEach(({ reject }) => reject(new Error("WebSocket closed")));
+	}
+
+	onError(err: Event) {
+		this.pendingQuestions.forEach(({ reject }) => reject(new Error("WebSocket error")));
 	}
 }
 
@@ -79,6 +150,7 @@ export interface HonoConfig {
 	staticRoot?: string;
 	defaultForm?: string;
 	prefix?: string;
+	errorHandler?: (err: any) => void;
 }
 
 export function hono(
@@ -153,52 +225,18 @@ export function hono(
 		}
 		return c.json({
 			id: form.id,
-			name: form.name,
+			title: form.title,
 			description: form.description,
 		} satisfies FormInfo);
 	});
 
-	app.get(`${prefix}/:form/ws`, upgradeWebSocket(async (c) => {
-		let rpc: HonoWebSocketRPC | undefined;
-		return {
-			onOpen: (evt, ws) => {
-				const form = forms.get(decodeURIComponent(c.req.param("form")));
-				if (form === undefined) {
-					ws.close(404, "Not Found");
-					return;
-				}
-				ws.binaryType = "arraybuffer";
-				rpc = new HonoWebSocketRPC(ws);
-				const asker = new HonoAsker(rpc, c);
-				form.run(asker).catch((err) => {
-					console.error(err);
-					ws.close(500, "Internal Server Error");
-				}).finally(() => {
-					ws.close();
-				});
-			},
-			onMessage: (evt, ws) => {
-				if (rpc === undefined) {
-					return;
-				}
-				if (typeof evt.data === "string") {
-					rpc.onMessage(evt.data);
-				}
-			},
-			onClose: (evt, ws) => {
-				if (rpc === undefined) {
-					return;
-				}
-				rpc.onClose();
-			},
-			onError: (evt, ws) => {
-				if (rpc === undefined) {
-					return;
-				}
-				rpc.onError(evt);
-			},
-		};
-	}));
+	app.get(`${prefix}/:form/ws`, async (c, next) => {
+		const form = forms.get(c.req.param("form"));
+		if (!form) {
+			return c.notFound();
+		}
+		return upgradeWebSocket((c) => new HonoAsker(c, form, config?.errorHandler))(c, next);
+	});
 
 	app.get(`${prefix}/:form/:filename`, serveAssets);
 }

@@ -1,3 +1,5 @@
+import * as zod from "zod";
+
 export type StringOrRichContent = string | {
 	mimeType: "text/markdown";
 	content: string;
@@ -75,13 +77,42 @@ export type AnswerType<C extends QuestionConfig> =
 
 export type OmitType<C extends QuestionConfig> = Omit<C, "type">;
 
+function answerSchema(config: QuestionConfig): zod.ZodType<AnswerType<QuestionConfig>> {
+	switch (config.type) {
+		case "info":
+			return zod.void();
+		case "text":
+			return zod.string();
+		case "password":
+			return zod.string();
+		case "checkboxes":
+			return zod.array(zod.string())
+				.refine((values) => values.every((value) => Object.keys(config.choices).includes(value)))
+				.transform((values) => Array.from(new Set(values)));
+		case "radio":
+			return zod.string().refine((value) => Object.keys(config.choices).includes(value));
+		case "dropdown":
+			return zod.string().refine((value) => Object.keys(config.choices).includes(value));
+		case "date":
+			return zod.string().date();
+		case "time":
+			return zod.string().time();
+		case "group":
+			return zod.object(Object.fromEntries(
+				Object.entries(config.questions)
+					.map(([key, question]) => [key, answerSchema(question)] as const),
+			));
+		default:
+			throw new Error(`Unknown question type: ${(config as any).type}`);
+	}
+}
+
 export interface QuestionContext {
 	signal?: AbortSignal;
 }
 
 export abstract class Question<A extends Asker, const C extends QuestionConfig, O extends AnswerType<C> = AnswerType<C>> implements PromiseLike<O> {
 	private _promise?: Promise<O>;
-	private _finished = false;
 
 	private resolver?: (value: O) => void;
 	private rejector?: (reason: any) => void;
@@ -122,6 +153,10 @@ export abstract class Question<A extends Asker, const C extends QuestionConfig, 
 
 	toJSON(): QuestionConfig {
 		return this.config;
+	}
+
+	get answerSchema(): zod.ZodType<AnswerType<QuestionConfig>> {
+		return answerSchema(this.config);
 	}
 }
 
@@ -173,20 +208,20 @@ export abstract class Asker {
 
 export interface FormInfo {
 	id: string;
-	name?: string;
+	title?: string;
 	description?: StringOrRichContent;
 }
 
 export class Form implements FormInfo {
 	readonly id: string;
-	readonly name?: string;
+	readonly title?: string;
 	readonly description: FormInfo["description"];
 	constructor(
 		info: FormInfo,
 		public readonly run: (asker: Asker) => Promise<void>,
 	) {
 		this.id = info.id;
-		this.name = info.name;
+		this.title = info.title;
 		this.description = info.description;
 	}
 }

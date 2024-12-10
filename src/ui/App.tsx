@@ -4,9 +4,9 @@ import ReactMarkdown from "react-markdown";
 import { Container, CssBaseline, ThemeProvider, createTheme, Box, TextField, Typography, CardActions, Button } from "@mui/material";
 import { FormCard } from "./components/FormCard";
 import { FormQuestionCard } from "./components/FormInputCard";
-import type { FormInfo } from "../lib/base";
-import type { JSONRPCRequest } from "../lib/ws";
-import type { RPCAskRequest, RPCAskResponse, RPCCancelRequest } from "../lib/rpc";
+import type { AnswerType, FormInfo, QuestionConfig } from "../lib/base";
+import type { HonoServerMessage } from "../lib/hono";
+import { RichContent } from "./components/RichContent";
 
 const theme = createTheme({
 	colorSchemes: {
@@ -14,9 +14,16 @@ const theme = createTheme({
 	},
 });
 
+interface PendingQuestion<C extends QuestionConfig = QuestionConfig> {
+	id: string;
+	canceled: boolean;
+	config: C;
+	resolve: (answer: AnswerType<C>) => void;
+}
+
 export function App() {
 	const [formInfo, setFormInfo] = React.useState<FormInfo | undefined>();
-	const [questions, setQuestions] = React.useState<[RPCAskRequest, (answer: RPCAskResponse) => void][]>([]);
+	const [questions, setQuestions] = React.useState<PendingQuestion[]>([]);
 	const [started, setStarted] = React.useState(false);
 	const [closed, setClosed] = React.useState(false);
 	const [error, setError] = React.useState<string | undefined>();
@@ -41,39 +48,35 @@ export function App() {
 		);
 		ws.binaryType = "arraybuffer";
 		ws.onmessage = (event) => {
-			const req = JSON.parse(event.data) as JSONRPCRequest;
-			switch (req.method) {
-				case "ask":
-					const params = req.params as RPCAskRequest;
-					setQuestions((questions) => [
-						...questions,
-						[
-							params,
-							(answer: RPCAskResponse) => {
-								ws.send(JSON.stringify({
-									jsonrpc: "2.0",
-									id: req.id,
-									result: answer,
-								}));
-							}
-						]
-					]);
-					// scroll to bottom
-					setTimeout(() => {
-						window.scrollTo({
-							top: document.body.scrollHeight,
-							behavior: "smooth"
-						});
-					}, 100);
+			const req = JSON.parse(event.data) as HonoServerMessage;
+			switch (req.type) {
+				case "question":
+					setQuestions((qs) => [...qs, {
+						id: req.id,
+						canceled: false,
+						config: req.config,
+						resolve: (answer) => {
+							ws.send(JSON.stringify({
+								type: "answer",
+								id: req.id,
+								answer,
+							}));
+						},
+					}]);
 					break;
-				default:
-					console.log("Unknown method", req.method);
+				case "cancel":
+					setQuestions((qs) => qs.map((q) => q.id === req.id ? { ...q, canceled: true } : q));
+					break;
 			}
 		};
-		ws.onclose = () => {
+		ws.onclose = (ev) => {
 			setClosed(true);
+			if (ev.code !== 1000) {
+				setError(ev.reason ?? "Unknown error");
+			}
 		};
 		ws.onerror = (e) => {
+			console.error(e);
 			setError("WebSocket error");
 			setClosed(true);
 		};
@@ -119,9 +122,17 @@ export function App() {
 					{
 						formInfo === undefined ? undefined :
 						<FormCard>
-							<ReactMarkdown>
-								{`# ${formInfo.name}\n\n` + (formInfo.description ?? "")}
-							</ReactMarkdown>
+							<h1>
+								{ formInfo.title ?? formInfo.id }
+							</h1>
+							{
+								formInfo.description === undefined ? undefined :
+								<Box>
+									<RichContent>
+										{ formInfo.description }
+									</RichContent>
+								</Box>
+							}
 							<CardActions>
 								<Button
 									variant="contained"
@@ -134,11 +145,12 @@ export function App() {
 						</FormCard>
 					}
 					{
-						questions.map(([req, res], i) => (
+						questions.map((q, i) => (
 							<FormQuestionCard
-								key={req.id}
-								config={req.config}
-								submit={res}
+								key={q.id}
+								disabled={q.canceled}
+								config={q.config}
+								submit={q.resolve}
 								autoFocus={i === questions.length - 1}
 							/>
 						))

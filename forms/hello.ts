@@ -1,11 +1,13 @@
-import { type Asker, Form } from "formterm";
+import { type Asker, Form, markdown } from "formterm";
 
 // A form is a function that takes an asker as an argument
 export default new Form({
 	id: "helloworld",
-	name: "Hello, world!",
+	title: "Hello, world!",
 	// description supports markdown
-	description: "This is a simple form that asks for your name and then greets you with a personalized message.",
+	description: markdown`
+		A _simple_ form that asks for your name and greets you.
+	`
 }, async function (asker: Asker) {
 	const name = await asker.text({
 		title: "What's your name?",

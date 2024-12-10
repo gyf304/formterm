@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import * as fs from "node:fs/promises";
+import * as child from "node:child_process";
 
+import which from "which";
 import * as prompts from "@inquirer/prompts";
 import { Hono } from "hono";
 
@@ -10,13 +12,20 @@ import { hono } from "../lib/hono.js";
 
 // if we are executing this file with node,
 // check if bun or tsx is available and re-execute
-console.log("process.argv", process.argv);
 if (process.argv[0].split("/").pop() === "node") {
 	// check if bun is available in PATH
-	const bun = await fs.access("bun", fs.constants.X_OK)
-		.then(() => true)
-		.catch(() => false);
-	console.log("bun", bun);
+	for (const interpreter of ["bun", "tsx"]) {
+		const path = await which(interpreter, { nothrow: true });
+		if (path !== null) {
+			console.log(`Running with ${interpreter}`);
+			const code = await new Promise<void>((resolve) => {
+				const proc = child.spawn(path, process.argv.slice(1), { stdio: "inherit" });
+				proc.on("exit", resolve);
+			});
+			process.exit(code ?? 0);
+		}
+	}
+	console.log("Running with node");
 }
 
 const help = `
@@ -83,7 +92,7 @@ async function term(files: string[]) {
 	const form = forms.size > 1 ? await prompts.select({
 		message: "Select a form",
 		choices: Array.from(
-			forms.entries().map(([id, f]) => ({ name: `${f.name ?? "Untitled"} (${id})`, value: f }))
+			forms.entries().map(([id, f]) => ({ name: `${f.title ?? "Untitled"} (${id})`, value: f }))
 		),
 	}) : Array.from(forms.values())[0];
 	await form.run(new InquirerAsker());

@@ -1,11 +1,4 @@
-To install dependencies:
-```sh
-bun install
-```
+# FormTerm
 
-To run:
-```sh
-bun run dev
-```
+FormTerm is a tool to create and run interactive forms in the terminal or serve them via a web server.
 
-open http://localhost:3000
