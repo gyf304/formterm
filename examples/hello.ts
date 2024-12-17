@@ -8,7 +8,7 @@ export default new Form({
 	description: markdown`
 		A _simple_ form that asks for your name and greets you.
 	`
-}, async function (asker: Asker) {
+}, async (asker: Asker) => {
 	const name = await asker.text({
 		title: "What's your name?",
 	});

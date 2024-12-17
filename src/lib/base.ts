@@ -15,12 +15,20 @@ export interface TextQuestionConfig extends BaseQuestionConfig {
 	type: "text";
 }
 
+export interface MultilineQuestionConfig extends BaseQuestionConfig {
+	type: "multiline";
+}
+
 export interface PasswordQuestionConfig extends BaseQuestionConfig {
 	type: "password";
 }
 
 export interface InfoQuestionConfig extends BaseQuestionConfig {
 	type: "info";
+}
+
+export interface ConfirmQuestionConfig extends BaseQuestionConfig {
+	type: "confirm";
 }
 
 export interface CheckboxesQuestionConfig<O extends Record<string, string> = Record<string, string>> extends BaseQuestionConfig {
@@ -48,31 +56,39 @@ export interface TimeQuestionConfig extends BaseQuestionConfig {
 
 export interface GroupQuestionConfig extends BaseQuestionConfig {
 	type: "group";
-	questions: Record<string, QuestionConfig>;
+	questions: Record<string, GroupableQuestionConfig>;
 }
 
-export type QuestionConfig =
-	TextQuestionConfig |
-	PasswordQuestionConfig |
-	InfoQuestionConfig |
+export type GroupableQuestionConfig =
 	CheckboxesQuestionConfig |
-	RadioQuestionConfig |
-	DropdownQuestionConfig |
 	DateQuestionConfig |
-	TimeQuestionConfig |
+	DropdownQuestionConfig |
 	GroupQuestionConfig |
+	MultilineQuestionConfig |
+	PasswordQuestionConfig |
+	RadioQuestionConfig |
+	TextQuestionConfig |
+	TimeQuestionConfig |
+	never;
+
+export type QuestionConfig =
+	GroupableQuestionConfig |
+	InfoQuestionConfig |
+	ConfirmQuestionConfig |
 	never;
 
 export type AnswerType<C extends QuestionConfig> =
-	C extends { type: "text" } ? string :
-	C extends { type: "password" } ? string :
-	C extends { type: "info" } ? void :
+	C extends { type: "confirm" } ? boolean :
 	C extends { type: "checkboxes" } ? string[] :
-	C extends { type: "radio" } ? string :
-	C extends { type: "dropdown" } ? string :
 	C extends { type: "date" } ? string :
-	C extends { type: "time" } ? string :
+	C extends { type: "dropdown" } ? string :
 	C extends { type: "group" } ? Record<string, unknown> :
+	C extends { type: "info" } ? void :
+	C extends { type: "multiline" } ? string :
+	C extends { type: "password" } ? string :
+	C extends { type: "radio" } ? string :
+	C extends { type: "text" } ? string :
+	C extends { type: "time" } ? string :
 	never;
 
 export type OmitType<C extends QuestionConfig> = Omit<C, "type">;
@@ -81,7 +97,11 @@ function answerSchema(config: QuestionConfig): zod.ZodType<AnswerType<QuestionCo
 	switch (config.type) {
 		case "info":
 			return zod.void();
+		case "confirm":
+			return zod.boolean();
 		case "text":
+			return zod.string();
+		case "multiline":
 			return zod.string();
 		case "password":
 			return zod.string();
@@ -162,11 +182,14 @@ export abstract class Question<A extends Asker, const C extends QuestionConfig, 
 
 export abstract class Asker {
 	ask<C extends QuestionConfig>(config: C, context?: QuestionContext): Question<this, C, AnswerType<C>> {
-		throw new Error("Not implemented");
+		throw new Error(`Config type not implemented: ${config.type}`);
 	}
 
 	info(config: OmitType<InfoQuestionConfig>, context?: QuestionContext): Question<this, InfoQuestionConfig, void> {
 		return this.ask({ type: "info", ...config }, context);
+	}
+	confirm(config: OmitType<ConfirmQuestionConfig>, context?: QuestionContext): Question<this, ConfirmQuestionConfig, boolean> {
+		return this.ask({ type: "confirm", ...config }, context);
 	}
 
 	text(config: OmitType<TextQuestionConfig>, context?: QuestionContext): Question<this, { type: "text"; title: string }, string> {
@@ -191,7 +214,7 @@ export abstract class Asker {
 		return this.ask({ type: "time", ...config }, context);
 	}
 
-	group<Q extends Record<string, Question<any, any, any>>>(
+	group<Q extends Record<string, Question<any, GroupableQuestionConfig, any>>>(
 		config: { title: string; questions: Q },
 		context?: QuestionContext,
 	): Question<this, GroupQuestionConfig, Record<string, AnswerType<Q[keyof Q]["config"]>>> {

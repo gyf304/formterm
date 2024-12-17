@@ -4,9 +4,6 @@ export function unindent(arr: TemplateStringsArray, ...args: string[]) {
 		return s;
 	}
 	s = s.slice(1);
-	if (s[s.length - 1] === "\n") {
-		s = s.slice(0, s.length - 1);
-	}
 	const indent = s.match(/^([ \t]*)[! \t]/)?.[0] ?? "";
 	const parts = s.split("\n");
 	const newParts: string[] = [];
@@ -19,11 +16,16 @@ export function unindent(arr: TemplateStringsArray, ...args: string[]) {
 		}
 		newParts.push(part.slice(i));
 	}
-	return newParts.join("\n");
+	return newParts.filter((part, i) => i !== newParts.length - 1 || part !== "").join("\n");
+}
+
+function escapeMarkdown(s: string) {
+	return s.replaceAll("\\", "\\\\")
+		.replaceAll(/[^a-zA-Z0-9]/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
 export function markdown(arr: TemplateStringsArray, ...args: string[]) {
-	let s = unindent(arr, ...args);
+	let s = unindent(arr, ...args.map(escapeMarkdown));
 	return {
 		mimeType: "text/markdown",
 		content: s,

@@ -9,6 +9,7 @@ import {
 	AnswerType,
 	Asker,
 	CheckboxesQuestionConfig,
+	ConfirmQuestionConfig,
 	DateQuestionConfig,
 	DropdownQuestionConfig,
 	GroupQuestionConfig,
@@ -60,6 +61,16 @@ class InquirerTextQuestion<A extends InquirerAsker> extends InquirerQuestion<A, 
 	}
 }
 
+class InquirerMultilineQuestion<A extends InquirerAsker> extends InquirerQuestion<A, TextQuestionConfig> {
+	async run() {
+		await this.showInfo();
+		return p.editor(
+			{ message: this.config.title },
+			{ signal: this.signal },
+		);
+	}
+}
+
 class InquirerPasswordQuestion<A extends InquirerAsker> extends InquirerQuestion<A, PasswordQuestionConfig> {
 	async run() {
 		await this.showInfo();
@@ -95,6 +106,16 @@ class InquirerTimeQuestion<A extends InquirerAsker> extends InquirerQuestion<A, 
 class InquirerInfoQuestion<A extends InquirerAsker> extends InquirerQuestion<A, InfoQuestionConfig> {
 	async run() {
 		await this.showInfo(true);
+	}
+}
+
+class InquirerConfirmQuestion<A extends InquirerAsker> extends InquirerQuestion<A, ConfirmQuestionConfig> {
+	async run() {
+		await this.showInfo();
+		return p.confirm(
+			{ message: this.config.title },
+			{ signal: this.signal },
+		);
 	}
 }
 
@@ -165,7 +186,9 @@ class InquirerGroupQuestion<A extends InquirerAsker> extends InquirerQuestion<A,
 
 const questionClasses = {
 	info: InquirerInfoQuestion,
+	confirm: InquirerConfirmQuestion,
 	text: InquirerTextQuestion,
+	multiline: InquirerMultilineQuestion,
 	password: InquirerPasswordQuestion,
 	checkboxes: InquirerCheckboxesQuestion,
 	radio: InquirerSelectQuestion,
@@ -186,6 +209,10 @@ export class InquirerAsker extends Asker {
 
 	info(config: OmitType<InfoQuestionConfig>, context?: QuestionContext) {
 		return new InquirerInfoQuestion(this, { type: "info", ...config }, context);
+	}
+
+	confirm(config: OmitType<ConfirmQuestionConfig>, context?: QuestionContext): Question<this, ConfirmQuestionConfig, boolean> {
+		return new InquirerConfirmQuestion(this, { type: "confirm", ...config }, context);
 	}
 
 	text(config: OmitType<TextQuestionConfig>, context?: QuestionContext) {

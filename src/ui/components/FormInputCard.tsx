@@ -13,9 +13,14 @@ import type {
 	GroupQuestionConfig,
 	QuestionConfig,
 	AnswerType,
+	ConfirmQuestionConfig,
 } from "../../lib/base";
 import { FormCard } from "./FormCard";
 import { Box, Checkbox, FormControlLabel, MenuItem, Radio, RadioGroup, Select, TextField, Typography } from "@mui/material";
+
+function notReachable(_: never): never {
+	throw new Error("Not reachable");
+}
 
 export interface FormQuestionCardProps<C extends QuestionConfig> {
 	config: C;
@@ -86,6 +91,28 @@ export const FormTextQuestion: React.FC<FormTextQuestionProps> = (p) => {
 	);
 };
 
+export const FormMultiLineQuestion: React.FC<FormQuestionProps<TextQuestionConfig>> = (p) => {
+	return (
+		<BaseFormQuestion config={p.config} >
+			<TextField
+				disabled={p.disabled}
+				fullWidth
+				multiline
+				placeholder="Your answer"
+				value={p.value ?? ""}
+				onChange={(e) => p.onChange({
+					value: e.target.value,
+				})}
+				onKeyDown={(e) => {
+					if (e.key === "Enter") {
+						p.onSubmit?.();
+					}
+				}}
+			/>
+		</BaseFormQuestion>
+	);
+}
+
 export const FormPasswordQuestion: React.FC<FormQuestionProps<PasswordQuestionConfig>> = (p) => {
 	return (
 		<BaseFormQuestion config={p.config} >
@@ -113,6 +140,18 @@ export const FormInfoQuestion: React.FC<FormQuestionProps<InfoQuestionConfig>> =
 	React.useEffect(() => {
 		p.onChange({
 			value: undefined,
+			error: undefined,
+		});
+	});
+	return (
+		<BaseFormQuestion config={p.config} />
+	);
+};
+
+export const FormConfirmQuestion: React.FC<FormQuestionProps<ConfirmQuestionConfig>> = (p) => {
+	React.useEffect(() => {
+		p.onChange({
+			value: true,
 			error: undefined,
 		});
 	});
@@ -284,11 +323,17 @@ export const FormQuestion: React.FC<FormQuestionProps<QuestionConfig>> = (p) => 
 		case "text":
 			Element = FormTextQuestion;
 			break;
+		case "multiline":
+			Element = FormMultiLineQuestion;
+			break;
 		case "password":
 			Element = FormPasswordQuestion;
 			break;
 		case "info":
 			Element = FormInfoQuestion;
+			break;
+		case "confirm":
+			Element = FormConfirmQuestion;
 			break;
 		case "checkboxes":
 			Element = FormCheckboxesQuestion;
@@ -309,7 +354,7 @@ export const FormQuestion: React.FC<FormQuestionProps<QuestionConfig>> = (p) => 
 			Element = FormGroupQuestion;
 			break;
 		default:
-			throw new Error("Unknown question type");
+			notReachable(p.config);
 	}
 
 	return <Element
@@ -341,6 +386,10 @@ export const FormQuestionCard: React.FC<FormQuestionCardProps<QuestionConfig>> =
 				setSubmitted(true);
 				p.submit?.(value);
 			}}
+			onCancel={p.config.type === "confirm" ? () => {
+				setSubmitted(true);
+				p.submit?.(false);
+			} : undefined}
 			disabled={disabled || hasError}
 		>
 			<FormQuestion
