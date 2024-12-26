@@ -5,13 +5,28 @@ import { Context, Env, Hono, MiddlewareHandler } from "hono";
 import { AnswerType, Asker, Form, FormInfo, Question, QuestionConfig, QuestionContext } from "./base.js";
 import { UpgradeWebSocket, WSContext } from "hono/ws";
 import { ServeStaticOptions } from "hono/serve-static";
+import { unindent } from "./utils.js";
+
+function indexHTML(cssPath: string, jsPath: string, mode: string) {
+	return unindent`
+		<!DOCTYPE html>
+		<html lang="en">
+			<head>
+				<meta charset="UTF-8" />
+				<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+				<title>FormTerm</title>
+				<link rel="stylesheet" href="${cssPath}" />
+			</head>
+			<body>
+				<div id="root" data-mode="${mode}"></div>
+				<script src="${jsPath}"></script>
+			</body>
+		</html>
+	`;
+}
+
 
 type ServeStatic = (options: ServeStaticOptions<Env>) => MiddlewareHandler;
-
-interface ResolveRejecter<T> {
-	resolve: (value: T) => void;
-	reject: (reason: any) => void;
-}
 
 interface HonoQuestionMessage {
 	type: "question";
@@ -149,6 +164,7 @@ function dir(path: string, level = 1) {
 export interface HonoConfig {
 	staticRoot?: string;
 	defaultForm?: string;
+	noIndex?: boolean;
 	prefix?: string;
 	errorHandler?: (err: any) => void;
 }
@@ -159,6 +175,7 @@ export function hono(
 	serveStatic: ServeStatic,
 	forms: {
 		get: (key: string) => Form | undefined,
+		keys: () => Iterable<string>,
 	},
 	config?: HonoConfig,
 ) {
@@ -169,11 +186,6 @@ export function hono(
 		prefix = prefix.replace(/^\/+/, "").replace(/\/+$/, "");
 		prefix = "/" + prefix;
 	}
-
-	const serveIndex = serveStatic({
-		root: staticRoot,
-		rewriteRequestPath: () => "/index.html",
-	});
 
 	const serveAssets = serveStatic({
 		root: staticRoot,
@@ -197,6 +209,20 @@ export function hono(
 			}
 			return c.redirect(encodeURIComponent(config.defaultForm!) + "/");
 		});
+	} else if (!config?.noIndex) {
+		if (prefix !== "") {
+			app.get(`${prefix}`, async (c) => {
+				const url = new URL(c.req.url);
+				return c.redirect(url.pathname + "/");
+			});
+		}
+
+		app.get(`${prefix}/`, async (c) => {
+			if (c.req.header("Accept") === "application/json") {
+				return c.json(Array.from(forms.keys()).map((key) => forms.get(key)));
+			}
+			return c.html(indexHTML("./default/style.css", "./default/index.js", "list"));
+		});
 	}
 
 	app.get(`${prefix}/:form`, async (c) => {
@@ -215,19 +241,10 @@ export function hono(
 		if (!form) {
 			return c.notFound();
 		}
-		return await serveIndex(c, next);
-	});
-
-	app.get(`${prefix}/:form/info.json`, async (c, next) => {
-		const form = forms.get(c.req.param("form"));
-		if (!form) {
-			return c.notFound();
+		if (c.req.header("Accept") === "application/json") {
+			return c.json(form);
 		}
-		return c.json({
-			id: form.id,
-			title: form.title,
-			description: form.description,
-		} satisfies FormInfo);
+		return c.html(indexHTML("./style.css", "./index.js", "form"));
 	});
 
 	app.get(`${prefix}/:form/ws`, async (c, next) => {

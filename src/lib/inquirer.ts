@@ -12,6 +12,7 @@ import {
 	ConfirmQuestionConfig,
 	DateQuestionConfig,
 	DropdownQuestionConfig,
+	GroupableQuestionConfig,
 	GroupQuestionConfig,
 	InfoQuestionConfig,
 	OmitType,
@@ -55,7 +56,7 @@ class InquirerTextQuestion<A extends InquirerAsker> extends InquirerQuestion<A, 
 	async run() {
 		await this.showInfo();
 		return p.input(
-			{ message: this.config.title },
+			{ message: this.config.title, default: this.config.default },
 			{ signal: this.signal },
 		);
 	}
@@ -65,7 +66,7 @@ class InquirerMultilineQuestion<A extends InquirerAsker> extends InquirerQuestio
 	async run() {
 		await this.showInfo();
 		return p.editor(
-			{ message: this.config.title },
+			{ message: this.config.title, default: this.config.default },
 			{ signal: this.signal },
 		);
 	}
@@ -139,6 +140,7 @@ class InquirerSelectQuestion<A extends InquirerAsker> extends InquirerQuestion<A
 			{
 				message: this.config.title,
 				choices: Object.entries(this.config.choices).map(([value, name]) => ({ name, value })),
+				default: this.config.default,
 			},
 			{ signal: this.signal },
 		);
@@ -243,7 +245,12 @@ export class InquirerAsker extends Asker {
 		return new InquirerTimeQuestion(this, { type: "time", ...config }, context);
 	}
 
-	group<Q extends Record<string, Question<any, any, any>>>(config: { title: string, questions: Q; }, context?: QuestionContext): Question<this, GroupQuestionConfig, Record<string, AnswerType<Q[keyof Q]["config"]>>> {
+	group<Q extends Record<string, Question<any, GroupableQuestionConfig, any>>>(
+		config: { title: string; questions: Q },
+		context?: QuestionContext,
+	): Question<this, GroupQuestionConfig, {
+		[K in keyof Q]: Q[K] extends Question<any, any, infer O> ? O : never;
+	}> {
 		return new InquirerGroupQuestion(this, {
 			type: "group",
 			...config,

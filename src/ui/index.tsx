@@ -1,7 +1,10 @@
 import * as React from "react";
 import { createRoot } from "react-dom/client";
 
-import { App } from "./App";
+import { AppForm } from "./AppForm";
+import { AppList } from "./AppList";
 
-const root = createRoot(document.getElementById("root") as HTMLElement);
-root.render(<App />);
+const rootElement = document.getElementById("root") as HTMLElement;
+const root = createRoot(rootElement);
+root.render(rootElement.getAttribute("data-mode") === "form" ? <AppForm /> : <AppList />);
+

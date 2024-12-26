@@ -13,10 +13,12 @@ export interface BaseQuestionConfig {
 
 export interface TextQuestionConfig extends BaseQuestionConfig {
 	type: "text";
+	default?: string;
 }
 
 export interface MultilineQuestionConfig extends BaseQuestionConfig {
 	type: "multiline";
+	default?: string;
 }
 
 export interface PasswordQuestionConfig extends BaseQuestionConfig {
@@ -39,11 +41,13 @@ export interface CheckboxesQuestionConfig<O extends Record<string, string> = Rec
 export interface RadioQuestionConfig<O extends Record<string, string> = Record<string, string>> extends BaseQuestionConfig {
 	type: "radio";
 	choices: O;
+	default?: string & keyof O;
 }
 
 export interface DropdownQuestionConfig<O extends Record<string, string> = Record<string, string>> extends BaseQuestionConfig {
 	type: "dropdown";
 	choices: O;
+	default?: string & keyof O;
 }
 
 export interface DateQuestionConfig extends BaseQuestionConfig {
@@ -192,32 +196,34 @@ export abstract class Asker {
 		return this.ask({ type: "confirm", ...config }, context);
 	}
 
-	text(config: OmitType<TextQuestionConfig>, context?: QuestionContext): Question<this, { type: "text"; title: string }, string> {
+	text(config: OmitType<TextQuestionConfig>, context?: QuestionContext): Question<this, TextQuestionConfig, string> {
 		return this.ask({ type: "text", ...config }, context);
 	}
-	password(config: OmitType<PasswordQuestionConfig>, context?: QuestionContext): Question<this, { type: "password"; title: string }, string> {
+	password(config: OmitType<PasswordQuestionConfig>, context?: QuestionContext): Question<this, PasswordQuestionConfig, string> {
 		return this.ask({ type: "password", ...config }, context);
 	}
-	checkboxes<O extends Record<string, string>>(config: OmitType<CheckboxesQuestionConfig<O>>, context?: QuestionContext): Question<this, { type: "checkboxes"; title: string; choices: O }, keyof O extends string ? (keyof O)[] : never> {
-		return this.ask({ type: "checkboxes", ...config }, context) as any;
+	checkboxes<O extends Record<string, string>>(config: OmitType<CheckboxesQuestionConfig<O>>, context?: QuestionContext): Question<this, CheckboxesQuestionConfig, keyof O extends string ? (keyof O)[] : never> {
+		return this.ask({ type: "checkboxes", ...config } as any, context) as any;
 	}
-	radio<O extends Record<string, string>>(config: OmitType<RadioQuestionConfig<O>>, context?: QuestionContext): Question<this, { type: "radio"; title: string; choices: O }, keyof O extends string ? keyof O : never> {
-		return this.ask({ type: "radio", ...config }, context) as any;
+	radio<O extends Record<string, string>>(config: OmitType<RadioQuestionConfig<O>>, context?: QuestionContext): Question<this, RadioQuestionConfig, keyof O extends string ? keyof O : never> {
+		return this.ask({ type: "radio", ...config } as any, context) as any;
 	}
-	dropdown<O extends Record<string, string>>(config: OmitType<DropdownQuestionConfig<O>>, context?: QuestionContext): Question<this, { type: "dropdown"; title: string; choices: O }, keyof O extends string ? keyof O : never> {
-		return this.ask({ type: "dropdown", ...config }, context) as any;
+	dropdown<O extends Record<string, string>>(config: OmitType<DropdownQuestionConfig<O>>, context?: QuestionContext): Question<this, DropdownQuestionConfig, keyof O extends string ? keyof O : never> {
+		return this.ask({ type: "dropdown", ...config } as any, context) as any;
 	}
-	date(config: OmitType<DateQuestionConfig>, context?: QuestionContext): Question<this, { type: "date"; title: string }, string> {
+	date(config: OmitType<DateQuestionConfig>, context?: QuestionContext): Question<this, DateQuestionConfig, string> {
 		return this.ask({ type: "date", ...config }, context);
 	}
-	time(config: OmitType<TimeQuestionConfig>, context?: QuestionContext): Question<this, { type: "time"; title: string }, string> {
+	time(config: OmitType<TimeQuestionConfig>, context?: QuestionContext): Question<this, TimeQuestionConfig, string> {
 		return this.ask({ type: "time", ...config }, context);
 	}
 
 	group<Q extends Record<string, Question<any, GroupableQuestionConfig, any>>>(
 		config: { title: string; questions: Q },
 		context?: QuestionContext,
-	): Question<this, GroupQuestionConfig, Record<string, AnswerType<Q[keyof Q]["config"]>>> {
+	): Question<this, GroupQuestionConfig, {
+		[K in keyof Q]: Q[K] extends Question<any, any, infer O> ? O : never;
+	}> {
 		return this.ask({
 			type: "group",
 			...config,

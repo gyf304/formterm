@@ -187,6 +187,13 @@ export const FormCheckboxesQuestion: React.FC<FormQuestionProps<CheckboxesQuesti
 };
 
 export const FormRadioQuestion: React.FC<FormQuestionProps<RadioQuestionConfig>> = (p) => {
+	React.useEffect(() => {
+		if (p.config.default !== undefined) {
+			p.onChange({
+				value: p.config.default,
+			});
+		}
+	}, []);
 	return (
 		<BaseFormQuestion config={p.config}>
 			<RadioGroup
@@ -215,12 +222,20 @@ export const FormRadioQuestion: React.FC<FormQuestionProps<RadioQuestionConfig>>
 };
 
 export const FormDropdownQuestion: React.FC<FormQuestionProps<DropdownQuestionConfig>> = (p) => {
+	React.useEffect(() => {
+		if (p.config.default !== undefined) {
+			p.onChange({
+				value: p.config.default,
+			});
+		}
+	}, []);
 	return (
 		<BaseFormQuestion config={p.config}>
 			<Select
+				fullWidth
 				autoFocus={p.autoFocus}
 				disabled={p.disabled}
-				value={p.value}
+				value={p.value ?? ""}
 				onChange={(e) => p.onChange({
 					value: e.target.value,
 				})}

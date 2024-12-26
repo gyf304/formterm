@@ -9,7 +9,7 @@ import { Hono } from "hono";
 
 import { Form, unindent } from "../lib/index.js";
 import { InquirerAsker } from "../lib/inquirer.js";
-import { hono } from "../lib/hono.js";
+import { hono, type HonoConfig } from "../lib/hono.js";
 
 const help = unindent`
 Usage: formterm <term|serve> [...files/directories]
@@ -138,6 +138,7 @@ async function term(argv: string[]) {
 async function serve(argv: string[]) {
 	const args = arg({
 		"--help": Boolean,
+		"--no-index": Boolean,
 		"--port": Number,
 		"-p": "--port",
 	}, {
@@ -150,6 +151,7 @@ async function serve(argv: string[]) {
 
 			Options:
 			  -p, --port <port>    Port to listen on (default: 3000)
+			  --no-index           Disable index page
 		`);
 		process.exit(0);
 	}
@@ -165,6 +167,9 @@ async function serve(argv: string[]) {
 		process.exit(1);
 	}
 	const app = new Hono();
+	const config: HonoConfig = {
+		noIndex: args["--no-index"],
+	};
 	if (process.isBun) {
 		const {
 			createBunWebSocket,
@@ -179,6 +184,7 @@ async function serve(argv: string[]) {
 			upgradeWebSocket,
 			serveStatic,
 			forms,
+			config,
 		);
 		await Bun.serve({
 			fetch: app.fetch,
@@ -198,6 +204,7 @@ async function serve(argv: string[]) {
 			upgradeWebSocket,
 			serveStatic,
 			forms,
+			config,
 		);
 		const server = serve({
 			fetch: app.fetch,

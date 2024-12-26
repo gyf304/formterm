@@ -1,5 +1,4 @@
 import React from "react";
-import ReactMarkdown from "react-markdown";
 
 import { Container, CssBaseline, ThemeProvider, createTheme, Box, TextField, Typography, CardActions, Button } from "@mui/material";
 import { FormCard } from "./components/FormCard";
@@ -21,7 +20,7 @@ interface PendingQuestion<C extends QuestionConfig = QuestionConfig> {
 	resolve: (answer: AnswerType<C>) => void;
 }
 
-export function App() {
+export function AppForm() {
 	const [formInfo, setFormInfo] = React.useState<FormInfo | undefined>();
 	const [questions, setQuestions] = React.useState<PendingQuestion[]>([]);
 	const [started, setStarted] = React.useState(false);
@@ -31,7 +30,12 @@ export function App() {
 
 	React.useEffect(() => {
 		(async () => {
-			const response = await fetch(window.location.pathname.replace(/\/$/, "") + "/info.json");
+			const response = await fetch(window.location.pathname + "?type=json", {
+				method: "GET",
+				headers: {
+					"Accept": "application/json"
+				}
+			});
 			const formInfo = await response.json();
 			setFormInfo(formInfo);
 		})();
@@ -170,5 +174,3 @@ export function App() {
 		</ThemeProvider>
 	);
 }
-
-export default App;
