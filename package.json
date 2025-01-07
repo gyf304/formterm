@@ -1,5 +1,6 @@
 {
-  "name": "formterm",
+  "name": "@formterm/formterm",
+  "version": "0.0.1",
   "type": "module",
   "module": "./dist/lib/index.js",
   "types": "./dist/lib/index.d.ts",
