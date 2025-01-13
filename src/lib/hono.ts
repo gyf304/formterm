@@ -7,7 +7,7 @@ import { UpgradeWebSocket, WSContext } from "hono/ws";
 import { ServeStaticOptions } from "hono/serve-static";
 import { unindent } from "./utils.js";
 
-function indexHTML(cssPath: string, jsPath: string, mode: string) {
+function indexHTML(mode: string) {
 	return unindent`
 		<!DOCTYPE html>
 		<html lang="en">
@@ -15,11 +15,11 @@ function indexHTML(cssPath: string, jsPath: string, mode: string) {
 				<meta charset="UTF-8" />
 				<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 				<title>FormTerm</title>
-				<link rel="stylesheet" href="${cssPath}" />
+				<link rel="stylesheet" href="./index.css" />
 			</head>
 			<body>
 				<div id="root" data-mode="${mode}"></div>
-				<script src="${jsPath}"></script>
+				<script src="./index.js"></script>
 			</body>
 		</html>
 	`;
@@ -165,7 +165,6 @@ export interface HonoConfig {
 	staticRoot?: string;
 	defaultForm?: string;
 	noIndex?: boolean;
-	prefix?: string;
 	errorHandler?: (err: any) => void;
 }
 
@@ -181,11 +180,6 @@ export function hono(
 ) {
 	let staticRoot = config?.staticRoot ?? dir(import.meta.url.toString(), 3) + "/dist/ui/";
 	staticRoot = path.relative(process.cwd(), staticRoot);
-	let prefix = config?.prefix ?? "";
-	if (prefix !== "") {
-		prefix = prefix.replace(/^\/+/, "").replace(/\/+$/, "");
-		prefix = "/" + prefix;
-	}
 
 	const serveAssets = serveStatic({
 		root: staticRoot,
@@ -193,16 +187,7 @@ export function hono(
 	});
 
 	if (config?.defaultForm !== undefined) {
-		if (prefix !== "") {
-			app.get(prefix, async (c) => {
-				const form = forms.get(config.defaultForm!);
-				if (!form) {
-					return c.notFound();
-				}
-				return c.redirect(encodeURIComponent(config.defaultForm!) + "/");
-			});
-		}
-		app.get(`${prefix}/`, async (c) => {
+		app.get("/", async (c) => {
 			const form = forms.get(config.defaultForm!);
 			if (!form) {
 				return c.notFound();
@@ -210,44 +195,42 @@ export function hono(
 			return c.redirect(encodeURIComponent(config.defaultForm!) + "/");
 		});
 	} else if (!config?.noIndex) {
-		if (prefix !== "") {
-			app.get(`${prefix}`, async (c) => {
-				const url = new URL(c.req.url);
-				return c.redirect(url.pathname + "/");
-			});
-		}
-
-		app.get(`${prefix}/`, async (c) => {
-			if (c.req.header("Accept") === "application/json") {
-				return c.json(Array.from(forms.keys()).map((key) => forms.get(key)));
-			}
-			return c.html(indexHTML("./default/style.css", "./default/index.js", "list"));
+		app.get("/", async (c) => {
+			const url = new URL(c.req.url);
+			return c.redirect(url.pathname.replace(/\/$/, "") + "/index.html");
+		});
+		app.get("/index.html", serveAssets);
+		app.get("/index.json", async (c) => {
+			return c.json(Array.from(forms.keys()).map((key) => forms.get(key)));
 		});
 	}
 
-	app.get(`${prefix}/:form`, async (c) => {
+	app.get("/index.css", serveAssets);
+	app.get("/index.js", serveAssets);
+
+	const formIndex = async (c: Context) => {
 		const formName = decodeURIComponent(c.req.param("form")!);
 		const form = forms.get(formName);
 		if (!form) {
 			return c.notFound();
 		}
 		const url = new URL(c.req.url);
-		return c.redirect(url.pathname + "/");
-	});
+		return c.redirect(url.pathname.replace(/\/$/, "") + "/index.html");
+	};
 
-	app.get(`${prefix}/:form/`, async (c, next) => {
+	app.get(`/:form`, formIndex);
+	app.get(`/:form/`, formIndex);
+
+	app.get(`/:form/index.json`, async (c) => {
 		const formName = decodeURIComponent(c.req.param("form")!);
 		const form = forms.get(formName);
 		if (!form) {
 			return c.notFound();
 		}
-		if (c.req.header("Accept") === "application/json") {
-			return c.json(form);
-		}
-		return c.html(indexHTML("./style.css", "./index.js", "form"));
+		return c.json(form);
 	});
 
-	app.get(`${prefix}/:form/ws`, async (c, next) => {
+	app.get(`/:form/ws`, async (c, next) => {
 		const form = forms.get(c.req.param("form"));
 		if (!form) {
 			return c.notFound();
@@ -255,5 +238,19 @@ export function hono(
 		return upgradeWebSocket((c) => new HonoAsker(c, form, config?.errorHandler))(c, next);
 	});
 
-	app.get(`${prefix}/:form/:filename`, serveAssets);
+	app.get(`/:form/:filename`, serveAssets);
+}
+
+export function honoApp(
+	upgradeWebSocket: UpgradeWebSocket,
+	serveStatic: ServeStatic,
+	forms: {
+		get: (key: string) => Form | undefined,
+		keys: () => Iterable<string>,
+	},
+	config?: HonoConfig,
+): Hono {
+	const app = new Hono();
+	hono(app, upgradeWebSocket, serveStatic, forms, config);
+	return app;
 }

@@ -1,5 +1,8 @@
 {
   "name": "@formterm/formterm",
+  "publishConfig": {
+    "access": "public"
+  },
   "version": "0.0.1",
   "type": "module",
   "module": "./dist/lib/index.js",

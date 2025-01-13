@@ -7,12 +7,6 @@ import type { AnswerType, FormInfo, QuestionConfig } from "../lib/base";
 import type { HonoServerMessage } from "../lib/hono";
 import { RichContent } from "./components/RichContent";
 
-const theme = createTheme({
-	colorSchemes: {
-		dark: true,
-	},
-});
-
 interface PendingQuestion<C extends QuestionConfig = QuestionConfig> {
 	id: string;
 	canceled: boolean;
@@ -30,11 +24,10 @@ export function AppForm() {
 
 	React.useEffect(() => {
 		(async () => {
-			const response = await fetch(window.location.pathname + "?type=json", {
+			const url = new URL("./index.json", window.location.href);
+			const response = await fetch(url, {
 				method: "GET",
-				headers: {
-					"Accept": "application/json"
-				}
+				credentials: "same-origin",
 			});
 			const formInfo = await response.json();
 			setFormInfo(formInfo);
@@ -47,7 +40,7 @@ export function AppForm() {
 		}
 		const ws = new WebSocket(
 			window.location.origin.replace(/^http/, "ws") +
-			window.location.pathname.replace(/\/$/, "") +
+			window.location.pathname.replace(/\/[^/]*$/, "") +
 			"/ws"
 		);
 		ws.binaryType = "arraybuffer";
@@ -102,75 +95,72 @@ export function AppForm() {
 	}, [questions, closed]);
 
 	return (
-		<ThemeProvider theme={theme}>
-			<CssBaseline />
-			<Box
+		<Box
+			sx={{
+				minHeight: "100vh",
+				display: "flex",
+				flexDirection: "column",
+				alignItems: "center",
+				bgcolor: "background.default",
+				py: 4
+			}}
+		>
+			<Container
+				maxWidth="md"
 				sx={{
-					minHeight: "100vh",
 					display: "flex",
 					flexDirection: "column",
 					alignItems: "center",
-					bgcolor: "background.default",
-					py: 4
+					gap: 2
 				}}
 			>
-				<Container
-					maxWidth="md"
-					sx={{
-						display: "flex",
-						flexDirection: "column",
-						alignItems: "center",
-						gap: 2
-					}}
-				>
-					{
-						formInfo === undefined ? undefined :
-						<FormCard>
-							<h1>
-								{ formInfo.title ?? formInfo.id }
-							</h1>
-							{
-								formInfo.description === undefined ? undefined :
-								<Box>
-									<RichContent>
-										{ formInfo.description }
-									</RichContent>
-								</Box>
-							}
-							<CardActions>
-								<Button
-									variant="contained"
-									onClick={() => setStarted(true)}
-									disabled={started}
-								>
-									Start Form
-								</Button>
-							</CardActions>
-						</FormCard>
-					}
-					{
-						questions.map((q, i) => (
-							<FormQuestionCard
-								key={q.id}
-								disabled={q.canceled}
-								config={q.config}
-								submit={q.resolve}
-								autoFocus={i === questions.length - 1}
-							/>
-						))
-					}
-					{
-						closed ? <FormCard>
-							<Typography variant="h6" gutterBottom>
-								Form finished { error ? "with error" : "successfully" }
-							</Typography>
-							<Typography variant="body2" color="text.secondary">
-								{ error ?? "The form has finished." }
-							</Typography>
-						</FormCard> : undefined
-					}
-				</Container>
-			</Box>
-		</ThemeProvider>
+				{
+					formInfo === undefined ? undefined :
+					<FormCard>
+						<h1>
+							{ formInfo.title ?? formInfo.id }
+						</h1>
+						{
+							formInfo.description === undefined ? undefined :
+							<Box>
+								<RichContent>
+									{ formInfo.description }
+								</RichContent>
+							</Box>
+						}
+						<CardActions>
+							<Button
+								variant="contained"
+								onClick={() => setStarted(true)}
+								disabled={started}
+							>
+								Start Form
+							</Button>
+						</CardActions>
+					</FormCard>
+				}
+				{
+					questions.map((q, i) => (
+						<FormQuestionCard
+							key={q.id}
+							disabled={q.canceled}
+							config={q.config}
+							submit={q.resolve}
+							autoFocus={i === questions.length - 1}
+						/>
+					))
+				}
+				{
+					closed ? <FormCard>
+						<Typography variant="h6" gutterBottom>
+							Form finished { error ? "with error" : "successfully" }
+						</Typography>
+						<Typography variant="body2" color="text.secondary">
+							{ error ?? "The form has finished." }
+						</Typography>
+					</FormCard> : undefined
+				}
+			</Container>
+		</Box>
 	);
 }
