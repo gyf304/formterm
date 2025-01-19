@@ -71,6 +71,14 @@ export const BaseFormQuestion: React.FC<BaseFormQuestionProps> = (p) => {
 };
 
 export const FormTextQuestion: React.FC<FormTextQuestionProps> = (p) => {
+	React.useEffect(() => {
+		if (p.config.default !== undefined) {
+			p.onChange({
+				value: p.config.default,
+			});
+		}
+	}, []);
+
 	return (
 		<BaseFormQuestion config={p.config} >
 			<TextField
@@ -92,6 +100,14 @@ export const FormTextQuestion: React.FC<FormTextQuestionProps> = (p) => {
 };
 
 export const FormMultiLineQuestion: React.FC<FormQuestionProps<TextQuestionConfig>> = (p) => {
+	React.useEffect(() => {
+		if (p.config.default !== undefined) {
+			p.onChange({
+				value: p.config.default,
+			});
+		}
+	}, []);
+
 	return (
 		<BaseFormQuestion config={p.config} >
 			<TextField
