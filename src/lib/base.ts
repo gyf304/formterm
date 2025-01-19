@@ -199,6 +199,9 @@ export abstract class Asker {
 	text(config: OmitType<TextQuestionConfig>, context?: QuestionContext): Question<this, TextQuestionConfig, string> {
 		return this.ask({ type: "text", ...config }, context);
 	}
+	multiline(config: OmitType<MultilineQuestionConfig>, context?: QuestionContext): Question<this, MultilineQuestionConfig, string> {
+		return this.ask({ type: "multiline", ...config }, context);
+	}
 	password(config: OmitType<PasswordQuestionConfig>, context?: QuestionContext): Question<this, PasswordQuestionConfig, string> {
 		return this.ask({ type: "password", ...config }, context);
 	}

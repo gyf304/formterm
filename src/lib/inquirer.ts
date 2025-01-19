@@ -15,6 +15,7 @@ import {
 	GroupableQuestionConfig,
 	GroupQuestionConfig,
 	InfoQuestionConfig,
+	MultilineQuestionConfig,
 	OmitType,
 	PasswordQuestionConfig,
 	Question,
@@ -62,7 +63,7 @@ class InquirerTextQuestion<A extends InquirerAsker> extends InquirerQuestion<A, 
 	}
 }
 
-class InquirerMultilineQuestion<A extends InquirerAsker> extends InquirerQuestion<A, TextQuestionConfig> {
+class InquirerMultilineQuestion<A extends InquirerAsker> extends InquirerQuestion<A, MultilineQuestionConfig> {
 	async run() {
 		await this.showInfo();
 		return p.editor(
@@ -219,6 +220,10 @@ export class InquirerAsker extends Asker {
 
 	text(config: OmitType<TextQuestionConfig>, context?: QuestionContext) {
 		return new InquirerTextQuestion(this, { type: "text", ...config }, context);
+	}
+
+	multiline(config: OmitType<MultilineQuestionConfig>, context?: QuestionContext): Question<this, MultilineQuestionConfig, string> {
+		return new InquirerMultilineQuestion(this, { type: "multiline", ...config }, context);
 	}
 
 	password(config: OmitType<PasswordQuestionConfig>, context?: QuestionContext) {

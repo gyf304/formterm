@@ -119,11 +119,6 @@ export const FormMultiLineQuestion: React.FC<FormQuestionProps<TextQuestionConfi
 				onChange={(e) => p.onChange({
 					value: e.target.value,
 				})}
-				onKeyDown={(e) => {
-					if (e.key === "Enter") {
-						p.onSubmit?.();
-					}
-				}}
 			/>
 		</BaseFormQuestion>
 	);
